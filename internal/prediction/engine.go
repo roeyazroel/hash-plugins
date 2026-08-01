@@ -82,6 +82,10 @@ func (e *Engine) bootstrap(ctx context.Context, path string) {
 	default:
 	}
 	e.mu.Lock()
+	if ctx.Err() != nil {
+		e.mu.Unlock()
+		return
+	}
 	for _, pair := range seq {
 		if pair[0] == "" || pair[1] == "" {
 			continue
