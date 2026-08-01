@@ -40,13 +40,15 @@ type pluginState struct {
 	engine *prediction.Engine
 }
 
-func (p *pluginState) close() {
+func (p *pluginState) close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.engine != nil {
-		_ = p.engine.Close()
+		err := p.engine.Close()
 		p.engine = nil
+		return err
 	}
+	return nil
 }
 func (p *pluginState) get() *prediction.Engine { p.mu.Lock(); defer p.mu.Unlock(); return p.engine }
 
@@ -66,7 +68,9 @@ func main() {
 		if err != nil {
 			return nil, &sdk.Error{Code: -32602, Message: "invalid settings"}
 		}
-		state.close()
+		if err := state.close(); err != nil {
+			return nil, &sdk.Error{Code: -32001, Message: "prediction storage unavailable"}
+		}
 		if params.SessionKind != "doctor" {
 			engine, err := prediction.Open(context.Background(), cfg, prediction.DefaultDataPath())
 			if err != nil {
@@ -89,7 +93,9 @@ func main() {
 			if line == "" {
 				line = params.OriginalLine
 			}
-			engine.Observe(prediction.Outcome{Line: line, CWD: params.CWD, ExitCode: params.ExitCode, Canceled: params.Canceled, FailureKind: params.FailureKind})
+			if err := engine.Observe(prediction.Outcome{Line: line, CWD: params.CWD, ExitCode: params.ExitCode, Canceled: params.Canceled, FailureKind: params.FailureKind}); err != nil {
+				return nil, &sdk.Error{Code: -32001, Message: "prediction storage unavailable"}
+			}
 		}
 		return map[string]any{"corrections": []string{}}, nil
 	})
@@ -108,7 +114,12 @@ func main() {
 		candidate := engine.Suggest(params.Line, params.CWD, &prediction.Previous{Line: params.Previous.Line, CWD: params.Previous.CWD, ExitCode: params.Previous.ExitCode, Canceled: params.Previous.Canceled})
 		return map[string]any{"text": candidate}, nil
 	})
-	server.Handle("shutdown", func(sdk.Request) (any, *sdk.Error) { state.close(); return map[string]any{}, nil })
+	server.Handle("shutdown", func(sdk.Request) (any, *sdk.Error) {
+		if err := state.close(); err != nil {
+			return nil, &sdk.Error{Code: -32001, Message: "prediction storage unavailable"}
+		}
+		return map[string]any{}, nil
+	})
 	if err := server.Serve(); err != nil {
 		fmt.Fprintln(os.Stderr, "hash-adaptive-prediction:", err)
 		os.Exit(1)
