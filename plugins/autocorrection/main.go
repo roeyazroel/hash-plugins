@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/tfcace/hash-plugins/internal/correction"
-	"github.com/tfcace/hash-plugins/sdk"
+	"github.com/roeyazroel/hash-plugins/internal/correction"
+	"github.com/roeyazroel/hash-plugins/sdk"
 )
 
 type hostClient struct {

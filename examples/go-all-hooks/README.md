@@ -5,7 +5,8 @@ implements every reserved hook shape so SDK authors can exercise framing; only
 the correction slice documented by the current Hash guide is operational.
 
 ```sh
-cd /Users/roeyazroel/Documents/github/roeyazroel/hash-plugins
+git clone https://github.com/roeyazroel/hash-plugins.git
+cd hash-plugins
 mkdir -p examples/go-all-hooks/bin
 go build -trimpath -o examples/go-all-hooks/bin/all-hooks ./examples/go-all-hooks
 hash plugin link "$PWD/examples/go-all-hooks"

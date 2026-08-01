@@ -17,7 +17,8 @@ safely changes exactly one eligible token.
 ## Build, install, and configure
 
 ```sh
-cd /Users/roeyazroel/Documents/github/roeyazroel/hash-plugins
+git clone https://github.com/roeyazroel/hash-plugins.git
+cd hash-plugins
 go build -trimpath -o plugins/autocorrection/hash-autocorrection ./plugins/autocorrection
 hash plugin link "$PWD/plugins/autocorrection"
 hash plugin inspect io.runhash.autocorrection

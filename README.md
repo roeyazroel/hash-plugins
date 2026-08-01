@@ -2,7 +2,7 @@
 
 Language-agnostic protocol-v1 SDK, examples, and separately built Hash smart
 plugins. Nothing here installs or enables itself. The exact wire contract is
-the Hash [plugin developer guide](../hash/docs/plugins/README.md).
+the Hash [plugin developer guide](https://github.com/tfcace/hash/blob/master/docs/plugins/README.md).
 
 ```sh
 go test ./...

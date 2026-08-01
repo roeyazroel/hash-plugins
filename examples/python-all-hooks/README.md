@@ -5,7 +5,8 @@ access and is never enabled automatically. Current Hash operates only the
 correction slice; the other handlers demonstrate reserved wire shapes.
 
 ```sh
-cd /Users/roeyazroel/Documents/github/roeyazroel/hash-plugins
+git clone https://github.com/roeyazroel/hash-plugins.git
+cd hash-plugins
 mkdir -p examples/python-all-hooks/bin
 cp examples/python-all-hooks/all_hooks.py examples/python-all-hooks/bin/all-hooks
 chmod +x examples/python-all-hooks/bin/all-hooks

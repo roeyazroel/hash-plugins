@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/tfcace/hash-plugins/sdk"
+	"github.com/roeyazroel/hash-plugins/sdk"
 	"os"
 )
 
