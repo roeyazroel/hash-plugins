@@ -34,6 +34,111 @@ func TestCorrectsRealGitUnknownCommandDiagnostic(t *testing.T) {
 	}
 }
 
+func TestCorrectsFromGenericDiagnosticAlternativeWithoutOtherEvidence(t *testing.T) {
+	tests := []struct {
+		name       string
+		line       string
+		diagnostic string
+		want       string
+	}{
+		{
+			name:       "most similar command block",
+			line:       "vcs pill",
+			diagnostic: "vcs: 'pill' is not a vcs command\n\nThe most similar command is\n\tpull",
+			want:       "vcs pull",
+		},
+		{
+			name:       "similar subcommand inline",
+			line:       "tool sevre",
+			diagnostic: "error: unrecognized subcommand 'sevre'\n\n  tip: a similar subcommand exists: 'serve'",
+			want:       "tool serve",
+		},
+		{
+			name:       "did you mean long flag",
+			line:       "tool --verbsoe",
+			diagnostic: "error: unknown flag '--verbsoe'\nDid you mean '--verbose'?",
+			want:       "tool --verbose",
+		},
+		{
+			name:       "full command alternative",
+			line:       "pkg isntall",
+			diagnostic: "unknown command 'isntall'\nDid you mean this?\n    pkg install",
+			want:       "pkg install",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := (Engine{}).Correct(context.Background(), fakeHost{}, Params{
+				ExecutedLine: tt.line,
+				ExitCode:     1,
+				StderrTail:   tt.diagnostic,
+			})
+			if len(got) != 1 || got[0] != tt.want {
+				t.Fatalf("got %v, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDiagnosticAlternativeMustBeSafeAndReferToFailedToken(t *testing.T) {
+	tests := []Params{
+		{
+			ExecutedLine: "tool delte",
+			ExitCode:     1,
+			StderrTail:   "unknown subcommand 'delte'\nDid you mean 'destroy'?",
+		},
+		{
+			ExecutedLine: "tool sevre --prod",
+			ExitCode:     1,
+			StderrTail:   "unknown subcommand 'sevre'\nDid you mean 'other serve --prod'?",
+		},
+		{
+			ExecutedLine: "tool sevre",
+			ExitCode:     1,
+			StderrTail:   "unknown subcommand 'other'\nDid you mean 'serve'?",
+		},
+		{
+			ExecutedLine: "tool sevre",
+			ExitCode:     1,
+			StderrTail:   "unknown subcommand 'sevre'\nDid you mean 'serve;rm'?",
+		},
+	}
+
+	for _, params := range tests {
+		if got := (Engine{}).Correct(context.Background(), fakeHost{}, params); len(got) != 0 {
+			t.Fatalf("accepted unsafe diagnostic alternative %v for %+v", got, params)
+		}
+	}
+}
+
+func TestDiagnosticAlternativeDoesNotAuthorizeDestructiveExecutable(t *testing.T) {
+	got := (Engine{}).Correct(context.Background(), fakeHost{}, Params{
+		ExecutedLine: "rmm -rf build",
+		ExitCode:     127,
+		FailureKind:  "command_not_found",
+		StderrTail:   "rmm: command not found\nDid you mean 'rm'?",
+	})
+	if len(got) != 0 {
+		t.Fatalf("accepted destructive diagnostic-only correction: %v", got)
+	}
+}
+
+func TestDiagnosticAlternativeOutranksUnrelatedLocalEvidence(t *testing.T) {
+	h := fakeHost{
+		history:    []HistoryEntry{{Line: "tool severe"}},
+		completion: []CompletionItem{{InsertText: "severe"}},
+	}
+	got := (Engine{}).Correct(context.Background(), h, Params{
+		ExecutedLine: "tool sevre",
+		ExitCode:     1,
+		StderrTail:   "unknown subcommand 'sevre'\ntip: a similar subcommand exists: 'serve'",
+	})
+	if len(got) != 1 || got[0] != "tool serve" {
+		t.Fatalf("got %v, want the diagnostic-provided correction", got)
+	}
+}
+
 func TestCorrectsExecutableFromCommandNotFoundEvidence(t *testing.T) {
 	h := fakeHost{history: []HistoryEntry{{Line: "git status"}}, completion: []CompletionItem{{InsertText: "git"}}}
 	got := (Engine{}).Correct(context.Background(), h, Params{ExecutedLine: "gti status", ExitCode: 127, FailureKind: "command_not_found"})

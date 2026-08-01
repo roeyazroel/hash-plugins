@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -105,26 +104,11 @@ type candidateEvidence struct {
 	recency int
 }
 
-type diagnosticKind uint8
-
 const (
-	diagnosticNone diagnosticKind = iota
-	diagnosticExecutable
-	diagnosticSubcommand
-	diagnosticLongFlag
+	sourceHistory = 1 << iota
+	sourceCompletion
+	sourceDiagnostic
 )
-
-var diagnosticPatterns = []struct {
-	kind    diagnosticKind
-	pattern *regexp.Regexp
-}{
-	{diagnosticSubcommand, regexp.MustCompile(`(?i)git:[[:space:]]+['\"]([[:alnum:]_.-]+)['\"][[:space:]]+is not a git command`)},
-	{diagnosticExecutable, regexp.MustCompile(`(?i)(?:unknown|unrecognized|invalid) command[^[:alnum:]-]+['\"]?([[:alnum:]_.-]+)`)},
-	{diagnosticSubcommand, regexp.MustCompile(`(?i)(?:unknown|unrecognized|invalid) subcommand[^[:alnum:]-]+['\"]?([[:alnum:]_.-]+)`)},
-	{diagnosticLongFlag, regexp.MustCompile(`(?i)(?:unknown|unrecognized|invalid) (?:option|flag)[^[:alnum:]-]+['\"]?([[:alnum:]_.-]+)`)},
-	{diagnosticLongFlag, regexp.MustCompile(`(?i)flag provided but not defined:[[:space:]]+([[:alnum:]_.-]+)`)},
-	{diagnosticLongFlag, regexp.MustCompile(`(?i)unexpected (?:argument|option)[^[:alnum:]-]+['\"]?((?:--)[[:alnum:]_.-]+)`)},
-}
 
 func (e Engine) Correct(ctx context.Context, host Host, p Params) []string {
 	if p.ExitCode == 0 || p.Canceled || p.FailureKind == "interrupted" || p.FailureKind == "signal" || !safeLine(p.ExecutedLine) {
@@ -134,11 +118,11 @@ func (e Engine) Correct(ctx context.Context, host Host, p Params) []string {
 	if !ok || len(words) == 0 || unsafeWrapper(words[0].value) {
 		return nil
 	}
+	diagnostic := p.ErrorMessage + "\n" + p.StderrTail
 	index := -1
 	if p.FailureKind == "command_not_found" {
 		index = 0
 	} else {
-		diagnostic := p.ErrorMessage + "\n" + p.StderrTail
 		kind, unknown := diagnosticToken(diagnostic)
 		matches := 0
 		for i, word := range words {
@@ -195,11 +179,16 @@ func (e Engine) Correct(ctx context.Context, host Host, p Params) []string {
 	for historyIndex, entry := range entries {
 		ws, valid := parseStaticSimple(entry.Line)
 		if valid && len(ws) > index {
-			addCandidate(sources, target, ws[index].value, 1, len(entries)-historyIndex, index)
+			addCandidate(sources, target, ws[index].value, sourceHistory, len(entries)-historyIndex, index)
 		}
 	}
 	for _, item := range items {
-		addCandidate(sources, target, item.InsertText, 2, 0, index)
+		addCandidate(sources, target, item.InsertText, sourceCompletion, 0, index)
+	}
+	for _, alternative := range diagnosticAlternatives(diagnostic) {
+		if value, valid := diagnosticReplacement(alternative, words, index); valid {
+			addCandidate(sources, target, value, sourceDiagnostic, 0, index)
+		}
 	}
 	type ranked struct {
 		value                      string
@@ -207,13 +196,16 @@ func (e Engine) Correct(ctx context.Context, host Host, p Params) []string {
 	}
 	var rankedCandidates []ranked
 	for value, candidateEvidence := range sources {
-		if index == 0 && destructiveExecutable(value) && candidateEvidence.sources != 3 {
+		if index == 0 && destructiveExecutable(value) && candidateEvidence.sources&(sourceHistory|sourceCompletion) != sourceHistory|sourceCompletion {
 			continue
 		}
 		rankedCandidates = append(rankedCandidates, ranked{value, candidateEvidence.sources, damerau(strings.ToLower(target), strings.ToLower(value)), candidateEvidence.recency})
 	}
 	sort.Slice(rankedCandidates, func(i, j int) bool {
 		ai, aj := rankedCandidates[i], rankedCandidates[j]
+		if hasDiagnostic(ai.sources) != hasDiagnostic(aj.sources) {
+			return hasDiagnostic(ai.sources)
+		}
 		if sourceCount(ai.sources) != sourceCount(aj.sources) {
 			return sourceCount(ai.sources) > sourceCount(aj.sources)
 		}
@@ -235,7 +227,7 @@ func (e Engine) Correct(ctx context.Context, host Host, p Params) []string {
 	}
 	var out []string
 	for _, candidate := range rankedCandidates {
-		if sourceCount(candidate.sources) != sourceCount(best.sources) || candidate.distance != best.distance || len(out) >= max {
+		if sourceCount(candidate.sources) != sourceCount(best.sources) || hasDiagnostic(candidate.sources) != hasDiagnostic(best.sources) || candidate.distance != best.distance || len(out) >= max {
 			break
 		}
 		replacement := quoteLike(words[index].raw, candidate.value)
@@ -388,15 +380,6 @@ func quoteLike(raw, value string) string {
 	}
 	return value
 }
-func diagnosticToken(text string) (diagnosticKind, string) {
-	for _, p := range diagnosticPatterns {
-		if m := p.pattern.FindStringSubmatch(text); len(m) == 2 {
-			return p.kind, strings.Trim(m[1], "'\"")
-		}
-	}
-	return diagnosticNone, ""
-}
-
 func unsafeWrapper(command string) bool {
 	switch command {
 	case "sudo", "doas", "eval", "env", "command", "builtin", "exec", "xargs":
@@ -406,13 +389,16 @@ func unsafeWrapper(command string) bool {
 	}
 }
 func sourceCount(mask int) int {
-	if mask == 3 {
-		return 2
+	count := 0
+	for mask > 0 {
+		count += mask & 1
+		mask >>= 1
 	}
-	if mask != 0 {
-		return 1
-	}
-	return 0
+	return count
+}
+
+func hasDiagnostic(mask int) bool {
+	return mask&sourceDiagnostic != 0
 }
 
 func addCandidate(dest map[string]candidateEvidence, target, value string, source, recency, index int) {

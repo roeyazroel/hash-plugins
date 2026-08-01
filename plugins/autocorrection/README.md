@@ -2,8 +2,15 @@
 
 This plugin is stateless, local-only, network-free, telemetry-free, and disabled
 until explicitly enabled. It corrects only a failed static executable,
-subcommand, or long flag when bounded diagnostics and successful history or
-core-local completion provide conservative evidence.
+subcommand, or long flag when bounded diagnostics provide the failed token and
+at least one conservative evidence source provides a nearby replacement.
+
+Evidence is command-agnostic. The plugin consumes explicit diagnostic
+alternatives such as “did you mean,” “most similar command,” and “a similar
+option exists,” plus successful history and core-local completion. A
+diagnostic-provided alternative is preferred because it comes from the command
+that rejected the token; otherwise independent evidence agreement wins. Hash
+still validates that the result safely changes exactly one eligible token.
 
 ## Build, install, and configure
 
@@ -25,8 +32,8 @@ history_limit = 100
 max_candidates = 3
 ```
 
-Open a new interactive Hash session. A deterministic transcript after `git
-status` already exists as successful history is:
+Open a new interactive Hash session. A diagnostic-provided alternative works
+without a prior successful history entry:
 
 ```text
 $ git sttaus
