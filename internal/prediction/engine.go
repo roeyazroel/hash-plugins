@@ -24,6 +24,7 @@ type Engine struct {
 	previous      *Outcome
 	dbPath        string
 	bootstrapPath string
+	closed        bool
 }
 
 func key(previous, next, cwd string) string { return previous + "\x00" + next + "\x00" + cwd }
@@ -123,6 +124,9 @@ func (e *Engine) WaitReady(ctx context.Context) error {
 func (e *Engine) Observe(o Outcome) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.closed {
+		return
+	}
 	if !success(o) {
 		e.previous = nil
 		return
@@ -157,6 +161,9 @@ func (e *Engine) Suggest(input, cwd string, previous *Previous) string {
 	}
 	e.mu.RLock()
 	defer e.mu.RUnlock()
+	if e.closed {
+		return ""
+	}
 	targetCWD := cwd
 	if previous.CWD != "" {
 		targetCWD = previous.CWD
@@ -224,12 +231,25 @@ func (e *Engine) Close() error {
 	case <-done:
 	case <-time.After(200 * time.Millisecond):
 	}
+	e.mu.Lock()
+	if e.closed {
+		e.mu.Unlock()
+		return nil
+	}
+	e.closed = true
 	e.previous = nil
 	if e.store != nil {
-		if err := e.store.close(); err != nil {
+		err := e.store.close()
+		if e.bootstrapPath != "" {
+			_ = os.Remove(e.bootstrapPath)
+		}
+		e.mu.Unlock()
+		if err != nil {
 			return err
 		}
+		return nil
 	}
+	e.mu.Unlock()
 	if e.bootstrapPath != "" {
 		_ = os.Remove(e.bootstrapPath)
 	}
