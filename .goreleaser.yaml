@@ -21,6 +21,15 @@ builds:
     goarch: [amd64, arm64]
     flags: [-trimpath]
 
+  - id: hash-autosuggestions
+    main: ./plugins/autosuggestions
+    binary: hash-autosuggestions
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+
 archives:
   - id: autocorrection
     ids: [hash-autocorrection]
@@ -35,6 +44,13 @@ archives:
     name_template: "hash-adaptive-prediction_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - src: plugins/adaptive-prediction/hash-plugin.toml
+        dst: hash-plugin.toml
+  - id: autosuggestions
+    ids: [hash-autosuggestions]
+    formats: [tar.gz]
+    name_template: "hash-autosuggestions_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - src: plugins/autosuggestions/hash-plugin.toml
         dst: hash-plugin.toml
 
 checksum:

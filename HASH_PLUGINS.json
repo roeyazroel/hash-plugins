@@ -13,6 +13,12 @@
       "darwin/arm64": {"name": "hash-adaptive-prediction_{{version}}_darwin_arm64.tar.gz"},
       "linux/amd64": {"name": "hash-adaptive-prediction_{{version}}_linux_amd64.tar.gz"},
       "linux/arm64": {"name": "hash-adaptive-prediction_{{version}}_linux_arm64.tar.gz"}
+    }},
+    "io.runhash.autosuggestions": {"artifacts": {
+      "darwin/amd64": {"name": "hash-autosuggestions_{{version}}_darwin_amd64.tar.gz"},
+      "darwin/arm64": {"name": "hash-autosuggestions_{{version}}_darwin_arm64.tar.gz"},
+      "linux/amd64": {"name": "hash-autosuggestions_{{version}}_linux_amd64.tar.gz"},
+      "linux/arm64": {"name": "hash-autosuggestions_{{version}}_linux_arm64.tar.gz"}
     }}
   }
 }

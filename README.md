@@ -11,13 +11,18 @@ hash plugin enable io.runhash.autocorrection
 hash plugin doctor io.runhash.autocorrection
 ```
 
-The release contains both shipped plugins. Select adaptive prediction
-explicitly when installing a multi-plugin release:
+The release contains three shipped plugins. Select adaptive prediction or
+literal-prefix autosuggestions explicitly when installing a multi-plugin
+release:
 
 ```sh
 hash plugin install github:roeyazroel/hash-plugins --id io.runhash.adaptive-prediction
 hash plugin enable io.runhash.adaptive-prediction
 hash plugin doctor io.runhash.adaptive-prediction
+
+hash plugin install github:roeyazroel/hash-plugins --id io.runhash.autosuggestions
+hash plugin enable io.runhash.autosuggestions
+hash plugin doctor io.runhash.autosuggestions
 ```
 
 Installation downloads the matching Darwin/Linux amd64/arm64 release archive.
@@ -34,6 +39,8 @@ Developers can still build and link a checkout; see
 [plugins/autocorrection/README.md](plugins/autocorrection/README.md).
 Adaptive prediction details are in
 [plugins/adaptive-prediction/README.md](plugins/adaptive-prediction/README.md).
+Warp-style literal-prefix history details are in
+[plugins/autosuggestions/README.md](plugins/autosuggestions/README.md).
 
 The Go and Python examples are offline deterministic all-hook examples. They
 show all lifecycle/editor/command responses and all host-service message

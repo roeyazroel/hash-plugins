@@ -1,11 +1,11 @@
 manifest_version = 1
 id = "io.runhash.autosuggestions"
 name = "Hash Autosuggestions"
-version = "0.1.0"
+version = "0.2.3"
 protocol_version = 1
-entrypoint = "bin/hash-autosuggestions"
+entrypoint = "hash-autosuggestions"
 hooks = ["editor.suggest"]
 commands = []
 [capabilities]
 context = ["editor", "history", "cwd"]
-host_services = ["history.query", "completion.query"]
+host_services = ["history.query"]
