@@ -80,6 +80,9 @@ func (s *Server) Call(ctx context.Context, parentID int64, method string, params
 		s.mu.Unlock()
 	}()
 	if err := s.write(ctx, map[string]any{"jsonrpc": "2.0", "id": id, "method": method, "params": values}); err != nil {
+		if ctx.Err() != nil {
+			s.sendCancel(id)
+		}
 		return err
 	}
 	select {
@@ -92,13 +95,17 @@ func (s *Server) Call(ctx context.Context, parentID int64, method string, params
 		}
 		return nil
 	case <-ctx.Done():
-		cancelCtx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-		_ = s.enqueueNotification(cancelCtx, map[string]any{"jsonrpc": "2.0", "method": "$/cancelRequest", "params": map[string]any{"id": id}})
-		cancel()
+		s.sendCancel(id)
 		return ctx.Err()
 	case <-s.closed:
 		return errors.New("Hash connection closed")
 	}
+}
+
+func (s *Server) sendCancel(id int64) {
+	cancelCtx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	_ = s.enqueueNotification(cancelCtx, map[string]any{"jsonrpc": "2.0", "method": "$/cancelRequest", "params": map[string]any{"id": id}})
 }
 
 func (s *Server) Serve() error {

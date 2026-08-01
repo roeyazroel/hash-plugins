@@ -18,6 +18,35 @@ type peerHarness struct {
 	done       chan error
 }
 
+type blockingWriter struct {
+	firstStarted chan struct{}
+	release      chan struct{}
+	mu           sync.Mutex
+	writes       [][]byte
+}
+
+func newBlockingWriter() *blockingWriter {
+	return &blockingWriter{firstStarted: make(chan struct{}), release: make(chan struct{})}
+}
+
+func (w *blockingWriter) Write(value []byte) (int, error) {
+	w.mu.Lock()
+	w.writes = append(w.writes, append([]byte(nil), value...))
+	first := len(w.writes) == 1
+	w.mu.Unlock()
+	if first {
+		close(w.firstStarted)
+		<-w.release
+	}
+	return len(value), nil
+}
+
+func (w *blockingWriter) count() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.writes)
+}
+
 func newPeerHarness(t *testing.T) *peerHarness {
 	t.Helper()
 	hostToPluginR, hostToPluginW := io.Pipe()
@@ -141,6 +170,32 @@ func TestCanceledCallRemovesPendingRequest(t *testing.T) {
 	if pending != 0 {
 		t.Fatalf("pending request leaked after cancel: %+v", request)
 	}
+}
+
+func TestCanceledCallDuringWriteStillSendsCancellation(t *testing.T) {
+	writer := newBlockingWriter()
+	server := New(strings.NewReader(""), writer)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- server.Call(ctx, 7, "host.completion.query", map[string]any{"line": "gti"}, nil)
+	}()
+	<-writer.firstStarted
+	cancel()
+	close(writer.release)
+	if err := <-done; err != context.Canceled {
+		t.Fatalf("got %v, want context canceled", err)
+	}
+	deadline := time.After(time.Second)
+	for writer.count() < 2 {
+		select {
+		case <-deadline:
+			t.Fatal("cancellation notification was not written")
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	close(server.closed)
 }
 
 func TestNotificationInvokesHandlerWithoutResponse(t *testing.T) {
