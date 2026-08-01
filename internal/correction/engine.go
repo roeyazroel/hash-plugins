@@ -29,6 +29,12 @@ type Host interface {
 	Completion(context.Context, string, int) ([]CompletionItem, error)
 }
 
+// CommandVocabularyHost is an optional, local-only evidence source for
+// subcommands. Implementations must remain bounded by the hook context.
+type CommandVocabularyHost interface {
+	CommandVocabulary(context.Context, string, string) ([]string, error)
+}
+
 type Config struct {
 	Strategies    []string `json:"strategies"`
 	HistoryLimit  int      `json:"history_limit"`
@@ -125,6 +131,9 @@ func (e Engine) Correct(ctx context.Context, host Host, p Params) []string {
 		index = 0
 	} else {
 		kind, unknown := diagnosticToken(diagnostic)
+		if qualified, valid := qualifiedDiagnosticSubcommand(diagnostic, words[0].value); valid {
+			kind, unknown = diagnosticSubcommand, qualified
+		}
 		matches := 0
 		for i, word := range words {
 			if word.value == unknown && i > 0 {
@@ -180,8 +189,18 @@ func (e Engine) Correct(ctx context.Context, host Host, p Params) []string {
 		limit = 100
 	}
 	queryLimit := min(limit, 100)
-	entries, _ := host.History(ctx, strings.TrimSpace(prefix), historyCWD, queryLimit)
-	items, _ := host.Completion(ctx, p.ExecutedLine, words[index].end)
+	entries, items, vocabulary := collectCorrectionEvidence(
+		ctx,
+		host,
+		strings.TrimSpace(prefix),
+		historyCWD,
+		queryLimit,
+		p.ExecutedLine,
+		words[index].end,
+		words[0].value,
+		diagnostic,
+		index == 1,
+	)
 	sources := map[string]candidateEvidence{}
 	for historyIndex, entry := range entries {
 		ws, valid := parseStaticSimple(entry.Line)
@@ -191,6 +210,9 @@ func (e Engine) Correct(ctx context.Context, host Host, p Params) []string {
 	}
 	for _, item := range items {
 		addCandidate(sources, target, item.InsertText, sourceCompletion, 0, index)
+	}
+	for _, value := range vocabulary {
+		addCandidate(sources, target, value, sourceCompletion, 0, index)
 	}
 	if index == 0 {
 		for _, executable := range e.Executables {
@@ -246,6 +268,54 @@ func (e Engine) Correct(ctx context.Context, host Host, p Params) []string {
 		out = append(out, p.ExecutedLine[:words[index].start]+replacement+p.ExecutedLine[words[index].end:])
 	}
 	return out
+}
+
+func collectCorrectionEvidence(
+	ctx context.Context,
+	host Host,
+	historyPrefix, historyCWD string,
+	historyLimit int,
+	line string,
+	cursor int,
+	command, diagnostic string,
+	wantVocabulary bool,
+) ([]HistoryEntry, []CompletionItem, []string) {
+	historyCh := make(chan []HistoryEntry, 1)
+	completionCh := make(chan []CompletionItem, 1)
+	go func() {
+		entries, _ := host.History(ctx, historyPrefix, historyCWD, historyLimit)
+		historyCh <- entries
+	}()
+	go func() {
+		items, _ := host.Completion(ctx, line, cursor)
+		completionCh <- items
+	}()
+
+	var vocabularyCh chan []string
+	if vocabularyHost, ok := host.(CommandVocabularyHost); ok && wantVocabulary {
+		vocabularyCh = make(chan []string, 1)
+		go func() {
+			values, _ := vocabularyHost.CommandVocabulary(ctx, command, diagnostic)
+			vocabularyCh <- values
+		}()
+	}
+
+	entries := receiveEvidence(ctx, historyCh)
+	items := receiveEvidence(ctx, completionCh)
+	var vocabulary []string
+	if vocabularyCh != nil {
+		vocabulary = receiveEvidence(ctx, vocabularyCh)
+	}
+	return entries, items, vocabulary
+}
+
+func receiveEvidence[T any](ctx context.Context, values <-chan T) (result T) {
+	select {
+	case result = <-values:
+		return result
+	case <-ctx.Done():
+		return result
+	}
 }
 
 func destructiveExecutable(value string) bool {

@@ -47,6 +47,10 @@ func (h hostClient) Completion(ctx context.Context, line string, cursor int) ([]
 	return items, err
 }
 
+func (h hostClient) CommandVocabulary(ctx context.Context, command, diagnostic string) ([]string, error) {
+	return correction.DiscoverCommandVocabulary(ctx, command, diagnostic)
+}
+
 func main() {
 	server := sdk.New(os.Stdin, os.Stdout)
 	defaults := correction.DefaultConfig()

@@ -5,11 +5,56 @@ import (
 	"encoding/json"
 	"slices"
 	"testing"
+	"time"
 )
 
 type fakeHost struct {
 	history    []HistoryEntry
 	completion []CompletionItem
+}
+
+type vocabularyHost struct {
+	fakeHost
+	vocabulary     []string
+	seenCommand    string
+	seenDiagnostic string
+}
+
+func (h *vocabularyHost) CommandVocabulary(_ context.Context, command, diagnostic string) ([]string, error) {
+	h.seenCommand, h.seenDiagnostic = command, diagnostic
+	return h.vocabulary, nil
+}
+
+type delayedVocabularyHost struct{ delay time.Duration }
+
+func (h delayedVocabularyHost) History(ctx context.Context, _, _ string, _ int) ([]HistoryEntry, error) {
+	if !waitForEvidence(ctx, h.delay) {
+		return nil, ctx.Err()
+	}
+	return nil, nil
+}
+
+func (h delayedVocabularyHost) Completion(ctx context.Context, _ string, _ int) ([]CompletionItem, error) {
+	if !waitForEvidence(ctx, h.delay) {
+		return nil, ctx.Err()
+	}
+	return nil, nil
+}
+
+func (h delayedVocabularyHost) CommandVocabulary(ctx context.Context, _, _ string) ([]string, error) {
+	if !waitForEvidence(ctx, h.delay) {
+		return nil, ctx.Err()
+	}
+	return []string{"ps"}, nil
+}
+
+func waitForEvidence(ctx context.Context, delay time.Duration) bool {
+	select {
+	case <-time.After(delay):
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 func (f fakeHost) History(context.Context, string, string, int) ([]HistoryEntry, error) {
@@ -85,6 +130,51 @@ func TestCorrectsRealGitUnknownCommandDiagnostic(t *testing.T) {
 	got := (Engine{}).Correct(context.Background(), h, Params{ExecutedLine: "git sttaus", ExitCode: 1, StderrTail: "git: 'sttaus' is not a git command. See 'git --help'."})
 	if len(got) != 1 || got[0] != "git status" {
 		t.Fatalf("got %v", got)
+	}
+}
+
+func TestCorrectsQualifiedUnknownCommandDiagnostic(t *testing.T) {
+	h := fakeHost{completion: []CompletionItem{{InsertText: "ps"}}}
+	got := (Engine{}).Correct(context.Background(), h, Params{
+		ExecutedLine: "docker pe",
+		ExitCode:     1,
+		StderrTail:   "docker: unknown command: docker pe\n\nRun 'docker --help' for more information",
+	})
+	if len(got) != 1 || got[0] != "docker ps" {
+		t.Fatalf("got %v, want docker ps", got)
+	}
+}
+
+func TestCorrectsQualifiedUnknownCommandFromCommandVocabulary(t *testing.T) {
+	diagnostic := "docker: unknown command: docker pe\n\nRun 'docker --help' for more information"
+	h := &vocabularyHost{vocabulary: []string{"run", "ps", "pull"}}
+	got := (Engine{}).Correct(context.Background(), h, Params{
+		ExecutedLine: "docker pe",
+		ExitCode:     1,
+		StderrTail:   diagnostic,
+	})
+	if len(got) != 1 || got[0] != "docker ps" {
+		t.Fatalf("got %v, want docker ps", got)
+	}
+	if h.seenCommand != "docker" || h.seenDiagnostic != "\n"+diagnostic {
+		t.Fatalf("vocabulary query = (%q, %q)", h.seenCommand, h.seenDiagnostic)
+	}
+}
+
+func TestCorrectionEvidenceSourcesRunConcurrently(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	got := (Engine{}).Correct(ctx, delayedVocabularyHost{delay: 60 * time.Millisecond}, Params{
+		ExecutedLine: "docker pe",
+		ExitCode:     1,
+		StderrTail:   "docker: unknown command: docker pe\nRun 'docker --help'",
+	})
+	if len(got) != 1 || got[0] != "docker ps" {
+		t.Fatalf("got %v after %v, want docker ps", got, time.Since(started))
+	}
+	if elapsed := time.Since(started); elapsed > 120*time.Millisecond {
+		t.Fatalf("evidence collection was sequential: %v", elapsed)
 	}
 }
 

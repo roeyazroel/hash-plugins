@@ -1,11 +1,14 @@
 package correction
 
 import (
+	"path/filepath"
 	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
 )
+
+var qualifiedUnknownCommandPattern = regexp.MustCompile(`(?im)^[^\r\n]*(?:unknown|unrecognized|invalid)[[:space:]]+command[[:space:]]*:[[:space:]]*['"]?([[:alnum:]_.-]+)[[:space:]]+([[:alnum:]_.-]+)['"]?[[:space:]]*$`)
 
 type diagnosticKind uint8
 
@@ -41,6 +44,19 @@ func diagnosticToken(text string) (diagnosticKind, string) {
 		}
 	}
 	return diagnosticNone, ""
+}
+
+// qualifiedDiagnosticSubcommand recognizes diagnostics that repeat the full
+// failed command path, such as "unknown command: tool typo". The executable
+// must match the command that Hash actually ran, so an unrelated diagnostic
+// line cannot choose which input token is eligible for replacement.
+func qualifiedDiagnosticSubcommand(text, executable string) (string, bool) {
+	for _, match := range qualifiedUnknownCommandPattern.FindAllStringSubmatch(text, 2) {
+		if len(match) == 3 && match[1] == filepath.Base(executable) {
+			return match[2], true
+		}
+	}
+	return "", false
 }
 
 func diagnosticAlternatives(text string) []string {
