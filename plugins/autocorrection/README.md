@@ -14,7 +14,23 @@ preferred because it comes from the command that rejected the token; otherwise
 independent evidence agreement wins. Hash still validates that the result
 safely changes exactly one eligible token.
 
-## Build, install, and configure
+## Install and configure
+
+Install the prebuilt bundle from a GitHub Release. No source checkout or Go
+toolchain is required:
+
+```sh
+hash plugin install github:roeyazroel/hash-plugins
+hash plugin inspect io.runhash.autocorrection
+hash plugin enable io.runhash.autocorrection
+hash plugin doctor io.runhash.autocorrection
+```
+
+For a reproducible install, append a release tag such as `@v0.1.0`. The
+installer selects the current OS and architecture, verifies the release
+checksum, and leaves the plugin disabled by default.
+
+Developers can instead build and link a checkout:
 
 ```sh
 git clone https://github.com/roeyazroel/hash-plugins.git
@@ -52,20 +68,18 @@ On branch main
 For several equal candidates, Up/Down or Ctrl-P/Ctrl-N chooses one. Enter fills
 and closes the chooser; a second Enter executes. Escape or typing dismisses.
 
-## Disable, rollback, and clean up safely
+## Upgrade, disable, and uninstall safely
 
 ```sh
+hash plugin upgrade io.runhash.autocorrection
 hash plugin disable io.runhash.autocorrection
-# Start a new Hash session to confirm it is inactive.
-plugin_link="${XDG_DATA_HOME:-$HOME/.local/share}/hash/plugins/io.runhash.autocorrection"
-test -L "$plugin_link"
-rm "$plugin_link"
-rm -f plugins/autocorrection/hash-autocorrection
+hash plugin uninstall io.runhash.autocorrection
 ```
 
-Inspect the exact path printed by `hash plugin link` before removing it. The
-`test -L` guard refuses to remove a real directory. Never remove the whole
-plugins directory. Re-linking the prior bundle version is the rollback path.
+Upgrade atomically switches to the newly verified version and retains the old
+managed version for rollback. Restart Hash after an upgrade so the interactive
+session starts the new process. Uninstall disables the plugin and removes only
+the bundle managed by `hash plugin install`; it refuses developer links.
 
 The plugin writes no raw command, diagnostic, history, output, or environment
 value to stderr. `hash plugin doctor io.runhash.autocorrection` is the first
