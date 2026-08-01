@@ -225,6 +225,42 @@ func TestCorrectsFromGenericDiagnosticAlternativeWithoutOtherEvidence(t *testing
 	}
 }
 
+func TestCorrectsGitMostSimilarSubcommandList(t *testing.T) {
+	got := (Engine{}).Correct(context.Background(), fakeHost{}, Params{
+		ExecutedLine: "git pukk",
+		ExitCode:     1,
+		FailureKind:  "exit_status",
+		StderrTail:   "git: 'pukk' is not a git command. See 'git --help'.\n\nThe most similar commands are\n        pull\n        push",
+	})
+	want := []string{"git pull", "git push"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestCorrectsCommonCLIAlternativeShapes(t *testing.T) {
+	tests := []struct {
+		name, line, diagnostic, want string
+	}{
+		{"npm unknown command", "npm instal", "npm error Unknown command: \"instal\"\nDid you mean this?\n  npm install", "npm install"},
+		{"cargo subcommand", "cargo buil", `error: unrecognized subcommand 'buil'
+
+tip: a similar subcommand exists: 'build'`, "cargo build"},
+		{"long flag list", "tool --verbsoe", `error: unknown option '--verbsoe'
+
+The most similar option is
+    --verbose`, "tool --verbose"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := (Engine{}).Correct(context.Background(), fakeHost{}, Params{ExecutedLine: tt.line, ExitCode: 1, StderrTail: tt.diagnostic})
+			if len(got) != 1 || got[0] != tt.want {
+				t.Fatalf("got %v, want [%s]", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDiagnosticAlternativeMustBeSafeAndReferToFailedToken(t *testing.T) {
 	tests := []Params{
 		{
