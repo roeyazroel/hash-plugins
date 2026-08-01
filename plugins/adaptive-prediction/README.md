@@ -4,7 +4,8 @@ This plugin learns exact successful command transitions locally. It only
 suggests `A -> B` after Hash reports that `A` exited zero; failures, signals,
 interruptions, and cancellations clear the context and are handled by the
 autocorrection plugin instead. The first acceptance action only fills the
-editor.
+editor. Multiple interactive Hash sessions share the prediction database;
+updates are serialized briefly and become visible to the other sessions.
 
 Build and link it during development:
 
