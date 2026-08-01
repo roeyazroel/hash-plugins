@@ -1,0 +1,11 @@
+manifest_version = 1
+id = "io.runhash.autocorrection"
+name = "Hash Autocorrection"
+version = "0.1.0"
+protocol_version = 1
+entrypoint = "hash-autocorrection"
+hooks = ["command.finished"]
+commands = []
+[capabilities]
+context = ["history", "cwd"]
+host_services = ["history.query", "completion.query"]

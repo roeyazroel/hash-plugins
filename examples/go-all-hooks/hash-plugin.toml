@@ -1,0 +1,11 @@
+manifest_version = 1
+id = "io.runhash.examples.go-all-hooks"
+name = "Hash Go all-hooks example"
+version = "0.1.0"
+protocol_version = 1
+entrypoint = "bin/all-hooks"
+hooks = ["session.start", "session.stop", "cwd.changed", "prompt.render", "editor.suggest", "completion.provide", "command.before", "command.finished", "history.added", "command.execute"]
+commands = ["example-hooks"]
+[capabilities]
+context = ["editor", "history", "cwd"]
+host_services = ["history.query", "completion.query", "environment.get", "output.write"]
