@@ -503,6 +503,14 @@ func addCandidate(dest map[string]candidateEvidence, target, value string, sourc
 			return
 		}
 	}
+	// A tool's own bounded "most similar" list is stronger evidence than
+	// history or completion, and commonly includes two-edit transpositions
+	// for short tokens (for example git's "pukk" -> "pull"/"push"). Keep
+	// the candidate constrained to the diagnostic token and still require the
+	// normal structural validation; only widen the edit bound here.
+	if source == sourceDiagnostic && n <= 8 && d <= 2 {
+		allowed = 2
+	}
 	if d > allowed {
 		return
 	}

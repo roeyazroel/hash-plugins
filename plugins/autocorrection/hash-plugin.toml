@@ -1,7 +1,7 @@
 manifest_version = 1
 id = "io.runhash.autocorrection"
 name = "Hash Autocorrection"
-version = "0.2.0"
+version = "0.2.1"
 protocol_version = 1
 entrypoint = "hash-autocorrection"
 hooks = ["command.finished"]
