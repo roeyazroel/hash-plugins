@@ -3,6 +3,7 @@ package correction
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 )
 
@@ -16,6 +17,59 @@ func (f fakeHost) History(context.Context, string, string, int) ([]HistoryEntry,
 }
 func (f fakeHost) Completion(context.Context, string, int) ([]CompletionItem, error) {
 	return f.completion, nil
+}
+
+type recordingHost struct {
+	historyCWD       string
+	completionLine   string
+	completionCursor int
+	history          []HistoryEntry
+	completion       []CompletionItem
+}
+
+func (h *recordingHost) History(_ context.Context, _, cwd string, _ int) ([]HistoryEntry, error) {
+	h.historyCWD = cwd
+	return h.history, nil
+}
+
+func (h *recordingHost) Completion(_ context.Context, line string, cursor int) ([]CompletionItem, error) {
+	h.completionLine = line
+	h.completionCursor = cursor
+	return h.completion, nil
+}
+
+func TestExecutableCorrectionUsesFailedTokenAndGlobalEvidence(t *testing.T) {
+	h := &recordingHost{
+		history:    []HistoryEntry{{Line: "git status"}},
+		completion: []CompletionItem{{InsertText: "git"}},
+	}
+	got := (Engine{}).Correct(context.Background(), h, Params{
+		ExecutedLine: "got pull",
+		ExitCode:     127,
+		FailureKind:  "command_not_found",
+		CWD:          "/work/project",
+	})
+	if len(got) != 1 || got[0] != "git pull" {
+		t.Fatalf("got %v, want git pull", got)
+	}
+	if h.completionLine != "got pull" || h.completionCursor != 3 {
+		t.Fatalf("completion query = (%q, %d), want (%q, 3)", h.completionLine, h.completionCursor, "got pull")
+	}
+	if h.historyCWD != "" {
+		t.Fatalf("executable history cwd = %q, want global history", h.historyCWD)
+	}
+}
+
+func TestExecutableCorrectionUsesPluginPATHVocabulary(t *testing.T) {
+	got := (Engine{Executables: []string{"jot", "gpt", "git"}}).Correct(context.Background(), fakeHost{}, Params{
+		ExecutedLine: "got pull",
+		ExitCode:     127,
+		FailureKind:  "command_not_found",
+	})
+	want := []string{"git pull", "gpt pull", "jot pull"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
 }
 
 func TestCorrectsSubcommandFromHistoryAndCompletion(t *testing.T) {

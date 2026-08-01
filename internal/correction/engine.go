@@ -97,6 +97,7 @@ type Engine struct {
 	HistoryLimit  int
 	MaxCandidates int
 	Strategies    []string
+	Executables   []string
 }
 
 type candidateEvidence struct {
@@ -168,13 +169,19 @@ func (e Engine) Correct(ctx context.Context, host Host, p Params) []string {
 	if index > 0 {
 		prefix = p.ExecutedLine[:words[index].start]
 	}
+	historyCWD := p.CWD
+	if index == 0 {
+		// Executables are session-global rather than directory-local. Successful
+		// use in any cwd is relevant evidence for repairing command position.
+		historyCWD = ""
+	}
 	limit := e.HistoryLimit
 	if limit < 1 || limit > 500 {
 		limit = 100
 	}
 	queryLimit := min(limit, 100)
-	entries, _ := host.History(ctx, strings.TrimSpace(prefix), p.CWD, queryLimit)
-	items, _ := host.Completion(ctx, prefix, len(prefix))
+	entries, _ := host.History(ctx, strings.TrimSpace(prefix), historyCWD, queryLimit)
+	items, _ := host.Completion(ctx, p.ExecutedLine, words[index].end)
 	sources := map[string]candidateEvidence{}
 	for historyIndex, entry := range entries {
 		ws, valid := parseStaticSimple(entry.Line)
@@ -184,6 +191,11 @@ func (e Engine) Correct(ctx context.Context, host Host, p Params) []string {
 	}
 	for _, item := range items {
 		addCandidate(sources, target, item.InsertText, sourceCompletion, 0, index)
+	}
+	if index == 0 {
+		for _, executable := range e.Executables {
+			addCandidate(sources, target, executable, sourceCompletion, 0, index)
+		}
 	}
 	for _, alternative := range diagnosticAlternatives(diagnostic) {
 		if value, valid := diagnosticReplacement(alternative, words, index); valid {

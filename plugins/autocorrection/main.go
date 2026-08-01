@@ -50,7 +50,8 @@ func (h hostClient) Completion(ctx context.Context, line string, cursor int) ([]
 func main() {
 	server := sdk.New(os.Stdin, os.Stdout)
 	defaults := correction.DefaultConfig()
-	engine := correction.Engine{HistoryLimit: defaults.HistoryLimit, MaxCandidates: defaults.MaxCandidates, Strategies: defaults.Strategies}
+	executables := correction.DiscoverExecutables(os.Getenv("PATH"))
+	engine := correction.Engine{HistoryLimit: defaults.HistoryLimit, MaxCandidates: defaults.MaxCandidates, Strategies: defaults.Strategies, Executables: executables}
 	server.Handle("initialize", func(request sdk.Request) (any, *sdk.Error) {
 		var params struct {
 			ProtocolVersion int             `json:"protocol_version"`
@@ -63,7 +64,7 @@ func main() {
 		if err != nil {
 			return nil, &sdk.Error{Code: -32602, Message: "invalid settings: " + err.Error()}
 		}
-		engine = correction.Engine{HistoryLimit: cfg.HistoryLimit, MaxCandidates: cfg.MaxCandidates, Strategies: cfg.Strategies}
+		engine = correction.Engine{HistoryLimit: cfg.HistoryLimit, MaxCandidates: cfg.MaxCandidates, Strategies: cfg.Strategies, Executables: executables}
 		return map[string]any{"protocol_version": 1}, nil
 	})
 	server.Handle("command.finished", func(request sdk.Request) (any, *sdk.Error) {

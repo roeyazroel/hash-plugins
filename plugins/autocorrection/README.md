@@ -7,10 +7,12 @@ at least one conservative evidence source provides a nearby replacement.
 
 Evidence is command-agnostic. The plugin consumes explicit diagnostic
 alternatives such as “did you mean,” “most similar command,” and “a similar
-option exists,” plus successful history and core-local completion. A
-diagnostic-provided alternative is preferred because it comes from the command
-that rejected the token; otherwise independent evidence agreement wins. Hash
-still validates that the result safely changes exactly one eligible token.
+option exists,” plus successful history, core-local completion, and a bounded
+snapshot of executable names from the inherited `PATH`. The plugin never runs
+those executables while discovering them. A diagnostic-provided alternative is
+preferred because it comes from the command that rejected the token; otherwise
+independent evidence agreement wins. Hash still validates that the result
+safely changes exactly one eligible token.
 
 ## Build, install, and configure
 
