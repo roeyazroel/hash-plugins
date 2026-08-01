@@ -1,6 +1,6 @@
 version: 2
 
-project_name: hash-autocorrection
+project_name: hash-plugins
 
 builds:
   - id: hash-autocorrection
@@ -12,17 +12,40 @@ builds:
     goarch: [amd64, arm64]
     flags: [-trimpath]
 
+  - id: hash-adaptive-prediction
+    main: ./plugins/adaptive-prediction
+    binary: hash-adaptive-prediction
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+
 archives:
-  - ids: [hash-autocorrection]
+  - id: autocorrection
+    ids: [hash-autocorrection]
     formats: [tar.gz]
     name_template: "hash-autocorrection_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     files:
       - src: plugins/autocorrection/hash-plugin.toml
         dst: hash-plugin.toml
+  - id: adaptive-prediction
+    ids: [hash-adaptive-prediction]
+    formats: [tar.gz]
+    name_template: "hash-adaptive-prediction_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - src: plugins/adaptive-prediction/hash-plugin.toml
+        dst: hash-plugin.toml
 
 checksum:
   name_template: SHA256SUMS
   algorithm: sha256
+  extra_files:
+    - glob: HASH_PLUGINS.json
+
+release:
+  extra_files:
+    - glob: HASH_PLUGINS.json
 
 changelog:
   disable: true

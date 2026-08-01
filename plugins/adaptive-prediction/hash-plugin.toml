@@ -1,0 +1,12 @@
+manifest_version = 1
+id = "io.runhash.adaptive-prediction"
+name = "Hash Adaptive Prediction"
+version = "0.2.0"
+protocol_version = 1
+entrypoint = "hash-adaptive-prediction"
+hooks = ["command.finished", "editor.suggest"]
+commands = []
+
+[capabilities]
+context = ["editor", "history", "cwd"]
+host_services = []
