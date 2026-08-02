@@ -25,13 +25,14 @@ Install the prebuilt bundle from a GitHub Release. No source checkout or Go
 toolchain is required:
 
 ```sh
-hash plugin install github:roeyazroel/hash-plugins
+hash plugin install github:roeyazroel/hash-plugins --id io.runhash.autocorrection
 hash plugin inspect io.runhash.autocorrection
 hash plugin enable io.runhash.autocorrection
 hash plugin doctor io.runhash.autocorrection
 ```
 
-For a reproducible install, append a release tag such as `@v0.1.0`. The
+For a reproducible install, append this plugin's release tag such as
+`@autocorrection-v1.0.0`. The
 installer selects the current OS and architecture, verifies the release
 checksum, and leaves the plugin disabled by default.
 

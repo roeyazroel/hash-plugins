@@ -1,0 +1,26 @@
+name: release catalog
+
+on:
+  push:
+    tags: ["catalog-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: python3 scripts/validate-catalog.py
+      - run: ./scripts/release-catalog.sh "$GITHUB_REF_NAME"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+          make_latest: true

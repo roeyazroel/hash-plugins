@@ -18,6 +18,14 @@ hash plugin enable io.runhash.adaptive-prediction
 hash plugin doctor io.runhash.adaptive-prediction
 ```
 
+Install a release without a source checkout:
+
+```sh
+hash plugin install github:roeyazroel/hash-plugins --id io.runhash.adaptive-prediction
+hash plugin enable io.runhash.adaptive-prediction
+hash plugin doctor io.runhash.adaptive-prediction
+```
+
 Configure it in `~/.config/hash/config.toml`:
 
 ```toml

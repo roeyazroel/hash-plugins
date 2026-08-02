@@ -25,38 +25,50 @@ test -f plugins/autocorrection/hash-plugin.toml
 test -f plugins/adaptive-prediction/hash-plugin.toml
 test -f plugins/autosuggestions/hash-plugin.toml
 test -f HASH_PLUGINS.json
+python3 scripts/validate-catalog.py
 
 hash_repo=${HASH_REPO:-"$repo_dir/../hash"}
 if [ -f "$hash_repo/go.mod" ]; then
   (cd "$hash_repo" && go test ./internal/plugin -run 'Schema|ProtocolSchema' -count=1)
 fi
 
-if command -v goreleaser >/dev/null 2>&1; then
-  goreleaser release --snapshot --clean
-  archive=$(find dist -name 'hash-autocorrection_*_darwin_arm64.tar.gz' -print -quit)
-  tar -tzf "$archive" | grep -qx 'hash-autocorrection'
-  tar -tzf "$archive" | grep -qx 'hash-plugin.toml'
-  python3 -c '
+plugin_specs=$(python3 - <<'PY'
 import json
+
 with open("HASH_PLUGINS.json", encoding="utf-8") as source:
-    index = json.load(source)
-artifacts = index["plugins"]["io.runhash.autosuggestions"]["artifacts"]
-expected = {
-    "darwin/amd64": "hash-autosuggestions_{{version}}_darwin_amd64.tar.gz",
-    "darwin/arm64": "hash-autosuggestions_{{version}}_darwin_arm64.tar.gz",
-    "linux/amd64": "hash-autosuggestions_{{version}}_linux_amd64.tar.gz",
-    "linux/arm64": "hash-autosuggestions_{{version}}_linux_arm64.tar.gz",
-}
-assert {key: value["name"] for key, value in artifacts.items()} == expected
-'
+    catalog = json.load(source)
+for plugin_id in sorted(catalog["plugins"]):
+    entry = catalog["plugins"][plugin_id]
+    binary = entry["artifacts"]["darwin/arm64"]["name"].split("_", 1)[0]
+    print(f"{plugin_id}\t{entry['version']}\t{entry['release_tag']}\t{binary}")
+PY
+)
+while IFS='	' read -r plugin_id plugin_version release_tag binary; do
+  release_dir="$build_dir/$release_tag"
+  ./scripts/package-plugin.sh "$plugin_id" "$plugin_version" "$release_dir"
+  (cd "$release_dir" && shasum -a 256 HASH_PLUGINS.json *.tar.gz > SHA256SUMS)
+  test -f "$release_dir/HASH_PLUGINS.json"
+  test -f "$release_dir/SHA256SUMS"
+  (cd "$release_dir" && shasum -a 256 -c SHA256SUMS)
   for platform in darwin_amd64 darwin_arm64 linux_amd64 linux_arm64; do
-    set -- dist/hash-autosuggestions_*_"$platform".tar.gz
+    set -- "$release_dir/${binary}_${plugin_version}_${platform}.tar.gz"
     test "$#" -eq 1
-    autosuggestions_archive=$1
-    test -f "$autosuggestions_archive"
-    tar -tzf "$autosuggestions_archive" | grep -qx 'hash-autosuggestions'
-    tar -tzf "$autosuggestions_archive" | grep -qx 'hash-plugin.toml'
+    test -f "$1"
+    tar -tzf "$1" | grep -qx "$binary"
+    tar -tzf "$1" | grep -qx 'hash-plugin.toml'
   done
-  cp HASH_PLUGINS.json dist/HASH_PLUGINS.json
-  (cd dist && shasum -a 256 -c SHA256SUMS)
-fi
+done <<EOF
+$plugin_specs
+EOF
+
+release_script_dir="$build_dir/release-script"
+autosuggestions_release_tag=$(printf '%s\n' "$plugin_specs" | awk -F '\t' '$1 == "io.runhash.autosuggestions" { print $3 }')
+./scripts/release-plugin.sh "$autosuggestions_release_tag" "$release_script_dir"
+(cd "$release_script_dir" && shasum -a 256 -c SHA256SUMS)
+
+catalog_script_dir="$build_dir/release-catalog"
+./scripts/release-catalog.sh catalog-v1.0.0 "$catalog_script_dir"
+test -f "$catalog_script_dir/HASH_PLUGINS.json"
+test -f "$catalog_script_dir/SHA256SUMS"
+test "$(find "$catalog_script_dir" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')" -eq 2
+(cd "$catalog_script_dir" && shasum -a 256 -c SHA256SUMS)

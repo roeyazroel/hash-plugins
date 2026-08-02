@@ -1,24 +1,35 @@
 {
-  "schema_version": 1,
-  "default": "io.runhash.autocorrection",
+  "schema_version": 2,
   "plugins": {
-    "io.runhash.autocorrection": {"artifacts": {
-      "darwin/amd64": {"name": "hash-autocorrection_{{version}}_darwin_amd64.tar.gz"},
-      "darwin/arm64": {"name": "hash-autocorrection_{{version}}_darwin_arm64.tar.gz"},
-      "linux/amd64": {"name": "hash-autocorrection_{{version}}_linux_amd64.tar.gz"},
-      "linux/arm64": {"name": "hash-autocorrection_{{version}}_linux_arm64.tar.gz"}
-    }},
-    "io.runhash.adaptive-prediction": {"artifacts": {
-      "darwin/amd64": {"name": "hash-adaptive-prediction_{{version}}_darwin_amd64.tar.gz"},
-      "darwin/arm64": {"name": "hash-adaptive-prediction_{{version}}_darwin_arm64.tar.gz"},
-      "linux/amd64": {"name": "hash-adaptive-prediction_{{version}}_linux_amd64.tar.gz"},
-      "linux/arm64": {"name": "hash-adaptive-prediction_{{version}}_linux_arm64.tar.gz"}
-    }},
-    "io.runhash.autosuggestions": {"artifacts": {
-      "darwin/amd64": {"name": "hash-autosuggestions_{{version}}_darwin_amd64.tar.gz"},
-      "darwin/arm64": {"name": "hash-autosuggestions_{{version}}_darwin_arm64.tar.gz"},
-      "linux/amd64": {"name": "hash-autosuggestions_{{version}}_linux_amd64.tar.gz"},
-      "linux/arm64": {"name": "hash-autosuggestions_{{version}}_linux_arm64.tar.gz"}
-    }}
+    "io.runhash.autocorrection": {
+      "version": "1.0.0",
+      "release_tag": "autocorrection-v1.0.0",
+      "artifacts": {
+        "darwin/amd64": {"name": "hash-autocorrection_1.0.0_darwin_amd64.tar.gz"},
+        "darwin/arm64": {"name": "hash-autocorrection_1.0.0_darwin_arm64.tar.gz"},
+        "linux/amd64": {"name": "hash-autocorrection_1.0.0_linux_amd64.tar.gz"},
+        "linux/arm64": {"name": "hash-autocorrection_1.0.0_linux_arm64.tar.gz"}
+      }
+    },
+    "io.runhash.adaptive-prediction": {
+      "version": "1.0.0",
+      "release_tag": "adaptive-prediction-v1.0.0",
+      "artifacts": {
+        "darwin/amd64": {"name": "hash-adaptive-prediction_1.0.0_darwin_amd64.tar.gz"},
+        "darwin/arm64": {"name": "hash-adaptive-prediction_1.0.0_darwin_arm64.tar.gz"},
+        "linux/amd64": {"name": "hash-adaptive-prediction_1.0.0_linux_amd64.tar.gz"},
+        "linux/arm64": {"name": "hash-adaptive-prediction_1.0.0_linux_arm64.tar.gz"}
+      }
+    },
+    "io.runhash.autosuggestions": {
+      "version": "1.0.0",
+      "release_tag": "autosuggestions-v1.0.0",
+      "artifacts": {
+        "darwin/amd64": {"name": "hash-autosuggestions_1.0.0_darwin_amd64.tar.gz"},
+        "darwin/arm64": {"name": "hash-autosuggestions_1.0.0_darwin_arm64.tar.gz"},
+        "linux/amd64": {"name": "hash-autosuggestions_1.0.0_linux_amd64.tar.gz"},
+        "linux/arm64": {"name": "hash-autosuggestions_1.0.0_linux_arm64.tar.gz"}
+      }
+    }
   }
 }

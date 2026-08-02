@@ -1,17 +1,17 @@
-name: verify
+name: release plugin
 
 on:
   push:
-    branches: [main]
     tags: ["autocorrection-v*", "adaptive-prediction-v*", "autosuggestions-v*"]
-  pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -20,4 +20,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.x"
-      - run: ./scripts/verify.sh
+      - run: ./scripts/release-plugin.sh "$GITHUB_REF_NAME"
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          fail_on_unmatched_files: true
+          make_latest: false
