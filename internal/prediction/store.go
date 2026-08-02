@@ -1,6 +1,7 @@
 package prediction
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -23,6 +24,7 @@ type store struct {
 
 const (
 	storeOpenLockTimeout = 400 * time.Millisecond
+	storeOpenRetryDelay  = 25 * time.Millisecond
 	storeReadLockTimeout = 50 * time.Millisecond
 	// Leave half of command.finished's 150 ms budget for protocol handling;
 	// writes that remain contended move to the retry queue.
@@ -42,14 +44,25 @@ type refreshSnapshot struct {
 }
 
 func openStore(path string) (*store, map[string]transition, error) {
-	return openStoreWithTimeout(path, storeOpenLockTimeout)
+	return openStoreContext(context.Background(), path)
 }
 
 func openBootstrapStore(path string) (*store, map[string]transition, error) {
-	return openStoreWithTimeout(path, bootstrapLockTimeout)
+	return openBootstrapStoreContext(context.Background(), path)
 }
 
-func openStoreWithTimeout(path string, timeout time.Duration) (*store, map[string]transition, error) {
+func openStoreContext(ctx context.Context, path string) (*store, map[string]transition, error) {
+	return openStoreWithTimeoutContext(ctx, path, storeOpenLockTimeout)
+}
+
+func openBootstrapStoreContext(ctx context.Context, path string) (*store, map[string]transition, error) {
+	return openStoreWithTimeoutContext(ctx, path, bootstrapLockTimeout)
+}
+
+func openStoreWithTimeoutContext(ctx context.Context, path string, timeout time.Duration) (*store, map[string]transition, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, nil, err
 	}
@@ -66,7 +79,7 @@ func openStoreWithTimeout(path string, timeout time.Duration) (*store, map[strin
 	if initialize && lockTimeout < bootstrapLockTimeout {
 		lockTimeout = bootstrapLockTimeout
 	}
-	db, err := bbolt.Open(path, 0o600, &bbolt.Options{ReadOnly: !initialize, Timeout: lockTimeout})
+	db, err := openBoltContext(ctx, path, !initialize, lockTimeout)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -102,6 +115,32 @@ func openStoreWithTimeout(path string, timeout time.Duration) (*store, map[strin
 		return nil, nil, err
 	}
 	return &store{path: path, revision: revision}, values, nil
+}
+
+func openBoltContext(ctx context.Context, path string, readOnly bool, timeout time.Duration) (*bbolt.DB, error) {
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return nil, lastErr
+		}
+		attempt := storeOpenRetryDelay
+		if remaining < attempt {
+			attempt = remaining
+		}
+		db, err := bbolt.Open(path, 0o600, &bbolt.Options{ReadOnly: readOnly, Timeout: attempt})
+		if err == nil {
+			return db, nil
+		}
+		if !isStoreContention(err) {
+			return nil, err
+		}
+		lastErr = err
+	}
 }
 
 func copyBucket(b *bbolt.Bucket) ([]encodedTransition, error) {

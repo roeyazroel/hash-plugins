@@ -4,7 +4,9 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"sync"
 
@@ -36,25 +38,124 @@ type suggestParams struct {
 }
 
 type pluginState struct {
-	mu     sync.Mutex
-	engine *prediction.Engine
+	mu         sync.Mutex
+	lifecycle  sync.Mutex
+	engine     *prediction.Engine
+	opener     engineOpener
+	openCancel context.CancelFunc
+	generation uint64
+	openWG     sync.WaitGroup
+	retiredWG  sync.WaitGroup
+	retiredErr error
+}
+
+type engineOpener func(context.Context, prediction.Config, string) (*prediction.Engine, error)
+
+func newPluginState(opener engineOpener) *pluginState {
+	if opener == nil {
+		opener = prediction.Open
+	}
+	return &pluginState{opener: opener}
 }
 
 func (p *pluginState) close() error {
+	p.lifecycle.Lock()
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.engine != nil {
-		err := p.engine.Close()
-		p.engine = nil
-		return err
+	p.generation++
+	if p.openCancel != nil {
+		p.openCancel()
+		p.openCancel = nil
 	}
-	return nil
+	engine := p.engine
+	p.engine = nil
+	p.mu.Unlock()
+	// A storage opener that finishes after cancellation closes its own engine
+	// before it releases this wait group. Retired engines are tracked
+	// separately, so shutdown cannot return while either one is still live.
+	p.openWG.Wait()
+	p.retiredWG.Wait()
+	p.mu.Lock()
+	retiredErr := p.retiredErr
+	p.retiredErr = nil
+	p.mu.Unlock()
+	if engine != nil {
+		err := engine.Close()
+		p.lifecycle.Unlock()
+		return errors.Join(retiredErr, err)
+	}
+	p.lifecycle.Unlock()
+	return retiredErr
 }
+
+func (p *pluginState) recordRetiredError(err error) {
+	if err == nil {
+		return
+	}
+	p.mu.Lock()
+	p.retiredErr = errors.Join(p.retiredErr, err)
+	p.mu.Unlock()
+}
+
+func (p *pluginState) start(cfg prediction.Config, path string) {
+	p.lifecycle.Lock()
+	p.mu.Lock()
+	p.generation++
+	generation := p.generation
+	if p.openCancel != nil {
+		p.openCancel()
+	}
+	old := p.engine
+	p.engine = nil
+	ctx, cancel := context.WithCancel(context.Background())
+	p.openCancel = cancel
+	p.openWG.Add(1)
+	if old != nil {
+		p.retiredWG.Add(1)
+	}
+	p.mu.Unlock()
+	p.lifecycle.Unlock()
+
+	if old != nil {
+		go func() {
+			defer p.retiredWG.Done()
+			p.recordRetiredError(old.Close())
+		}()
+	}
+	go func() {
+		defer p.openWG.Done()
+		engine, err := p.opener(ctx, cfg, path)
+		if err != nil {
+			if engine != nil {
+				p.recordRetiredError(engine.Close())
+			}
+			return
+		}
+		if engine == nil {
+			return
+		}
+		p.mu.Lock()
+		if p.generation == generation {
+			p.engine = engine
+			p.mu.Unlock()
+			return
+		}
+		p.mu.Unlock()
+		p.recordRetiredError(engine.Close())
+	}()
+}
+
 func (p *pluginState) get() *prediction.Engine { p.mu.Lock(); defer p.mu.Unlock(); return p.engine }
 
 func main() {
-	server := sdk.New(os.Stdin, os.Stdout)
-	state := &pluginState{}
+	server := newServer(os.Stdin, os.Stdout, newPluginState(prediction.Open))
+	if err := server.Serve(); err != nil {
+		fmt.Fprintln(os.Stderr, "hash-adaptive-prediction:", err)
+		os.Exit(1)
+	}
+}
+
+func newServer(in io.Reader, out io.Writer, state *pluginState) *sdk.Server {
+	server := sdk.New(in, out)
 	server.Handle("initialize", func(request sdk.Request) (any, *sdk.Error) {
 		var params struct {
 			ProtocolVersion int             `json:"protocol_version"`
@@ -68,17 +169,10 @@ func main() {
 		if err != nil {
 			return nil, &sdk.Error{Code: -32602, Message: "invalid settings"}
 		}
-		if err := state.close(); err != nil {
-			return nil, &sdk.Error{Code: -32001, Message: "prediction storage unavailable"}
-		}
 		if params.SessionKind != "doctor" {
-			engine, err := prediction.Open(context.Background(), cfg, prediction.DefaultDataPath())
-			if err != nil {
-				return nil, &sdk.Error{Code: -32001, Message: "prediction storage unavailable"}
-			}
-			state.mu.Lock()
-			state.engine = engine
-			state.mu.Unlock()
+			state.start(cfg, prediction.DefaultDataPath())
+		} else if err := state.close(); err != nil {
+			return nil, &sdk.Error{Code: -32001, Message: "prediction storage unavailable"}
 		}
 		return map[string]any{"protocol_version": 1}, nil
 	})
@@ -120,8 +214,5 @@ func main() {
 		}
 		return map[string]any{}, nil
 	})
-	if err := server.Serve(); err != nil {
-		fmt.Fprintln(os.Stderr, "hash-adaptive-prediction:", err)
-		os.Exit(1)
-	}
+	return server
 }

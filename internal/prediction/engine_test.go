@@ -225,6 +225,44 @@ func TestOpenStoreWaitsForConcurrentInitializer(t *testing.T) {
 	}
 }
 
+func TestOpenStoreContextCancelsWhileStoreIsLocked(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "prediction.db")
+	seed, _, err := openStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := seed.close(); err != nil {
+		t.Fatal(err)
+	}
+	locker, err := bbolt.Open(path, 0o600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = locker.Close() })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	opened := make(chan error, 1)
+	go func() {
+		st, _, err := openStoreContext(ctx, path)
+		if st != nil {
+			_ = st.close()
+		}
+		opened <- err
+	}()
+
+	time.Sleep(25 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-opened:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("openStoreContext() error = %v, want context cancellation", err)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("openStoreContext() did not stop promptly after cancellation")
+	}
+}
+
 func TestOpenStoreProcessHelper(t *testing.T) {
 	path := os.Getenv("HASH_PREDICTION_OPEN_HELPER")
 	if path == "" {
@@ -555,7 +593,7 @@ func TestEngineCreatesPrivateDatabase(t *testing.T) {
 	}
 }
 
-func TestCanceledBootstrapLeavesFinalDatabaseAbsent(t *testing.T) {
+func TestCanceledOpenLeavesFinalDatabaseAbsent(t *testing.T) {
 	root := t.TempDir()
 	history := filepath.Join(root, "history")
 	if err := os.WriteFile(history, []byte("one\ntwo\n"), 0o600); err != nil {
@@ -569,10 +607,12 @@ func TestCanceledBootstrapLeavesFinalDatabaseAbsent(t *testing.T) {
 	cfg.Shells = []string{"bash"}
 	cfg.HistoryPaths = map[string]string{"bash": history}
 	engine, err := open(cancelCtx, cfg, path, time.Now)
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("open() error = %v, want context cancellation", err)
 	}
-	_ = engine.Close()
+	if engine != nil {
+		t.Fatal("open() returned an engine after cancellation")
+	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("canceled bootstrap created final database: %v", err)
 	}

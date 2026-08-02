@@ -48,6 +48,9 @@ const maxPendingWrites = 1024
 
 func key(previous, next, cwd string) string { return previous + "\x00" + next + "\x00" + cwd }
 func open(ctx context.Context, cfg Config, path string, now func() time.Time) (*Engine, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if now == nil {
 		now = time.Now
 	}
@@ -73,7 +76,7 @@ func open(ctx context.Context, cfg Config, path string, now func() time.Time) (*
 		}
 		storePath = bootstrapPath
 	}
-	st, values, err := openStore(storePath)
+	st, values, err := openStoreContext(ctx, storePath)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +153,7 @@ func (e *Engine) bootstrap(ctx context.Context, path string) {
 		return
 	}
 	if e.bootstrapPath != "" {
-		reopened, loaded, err := promoteBootstrap(e.bootstrapPath, e.dbPath, values, os.Link)
+		reopened, loaded, err := promoteBootstrapContext(ctx, e.bootstrapPath, e.dbPath, values, os.Link)
 		if err != nil {
 			e.readyErr = err
 			e.preserveBootstrap = true
@@ -166,12 +169,19 @@ func (e *Engine) bootstrap(ctx context.Context, path string) {
 }
 
 func promoteBootstrap(temporary, final string, values map[string]transition, link func(string, string) error) (*store, map[string]transition, error) {
+	return promoteBootstrapContext(context.Background(), temporary, final, values, link)
+}
+
+func promoteBootstrapContext(ctx context.Context, temporary, final string, values map[string]transition, link func(string, string) error) (*store, map[string]transition, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	linkErr := link(temporary, final)
 	promoted := linkErr == nil
 	if linkErr != nil && !errors.Is(linkErr, fs.ErrExist) {
 		return nil, nil, fmt.Errorf("promote prediction database: %w", linkErr)
 	}
-	reopened, loaded, err := openBootstrapStore(final)
+	reopened, loaded, err := openBootstrapStoreContext(ctx, final)
 	if err != nil {
 		return nil, nil, fmt.Errorf("open promoted prediction database: %w", err)
 	}

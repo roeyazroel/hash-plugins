@@ -15,7 +15,7 @@ func TestAutosuggestionsShippingMetadata(t *testing.T) {
 	}
 	assertFileContains(t, filepath.Join(root, "plugins", "autosuggestions", "hash-plugin.toml"),
 		`id = "io.runhash.autosuggestions"`,
-		`version = "0.2.3"`,
+		`version = "0.2.4"`,
 		`entrypoint = "hash-autosuggestions"`,
 		`host_services = ["history.query"]`,
 	)
@@ -57,6 +57,22 @@ func TestAutosuggestionsShippingMetadata(t *testing.T) {
 		`io.runhash.adaptive-prediction`,
 	)
 	assertAutosuggestionsIndex(t, filepath.Join(root, "HASH_PLUGINS.json"))
+}
+
+func TestShippedPluginReleaseVersionsMatch(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, plugin := range []string{
+		"autocorrection",
+		"adaptive-prediction",
+		"autosuggestions",
+	} {
+		assertFileContains(t, filepath.Join(root, "plugins", plugin, "hash-plugin.toml"),
+			`version = "0.2.4"`,
+		)
+	}
 }
 
 func assertAutosuggestionsIndex(t *testing.T, path string) {

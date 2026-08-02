@@ -1,7 +1,7 @@
 manifest_version = 1
 id = "io.runhash.adaptive-prediction"
 name = "Hash Adaptive Prediction"
-version = "0.2.3"
+version = "0.2.4"
 protocol_version = 1
 entrypoint = "hash-adaptive-prediction"
 hooks = ["command.finished", "editor.suggest"]
